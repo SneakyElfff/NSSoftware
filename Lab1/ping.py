@@ -3,7 +3,9 @@ import struct
 import threading
 import time
 
+# Echo Reply: ICMP-message of type 8
 ICMP_ECHO_REQUEST = 8
+TIMEOUT = 2
 
 
 def calculate_checksum(source_string):
@@ -38,16 +40,19 @@ def calculate_checksum(source_string):
 
     return answer
 
-def create_packet(id):
-    header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, 0, id, 1)  # ICMP-header: type (8), code (8), checksum (16), id (16), sequence (16)
+
+def create_packet(host_id):
+    # ICMP-header: type (8), code (8), checksum (16), id (16), sequence (16)
+    header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, 0, host_id, 1)
+    # time stamp
     data = struct.pack('d', time.time())
 
     checksum = calculate_checksum(header + data)
-    header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, socket.htons(checksum), id, 1)
+    header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, socket.htons(checksum), host_id, 1)
     return header + data
 
+
 def ping_host(destination_addr, host_id):
-    global sock
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.getprotobyname('icmp'))
         sock.settimeout(2)
@@ -60,21 +65,30 @@ def ping_host(destination_addr, host_id):
             sent = sock.sendto(packet, (ip, 1))
             packet = packet[sent:]
 
-        while True:
-            # MSG_PEEK is used to peek data (get a copy) still saving it in the buffer
-            peeked_data, addr = sock.recvfrom(1024, socket.MSG_PEEK)
+        start_time = time.time()
 
-            # if the address belongs to the host, the packet should be finally accepted
-            if addr[0] == ip:
-                # finally erasing data from the buffer
-                response_data, addr = sock.recvfrom(1024)
-                print(f"Получен ответ от {destination_addr} ({ip})")
-                break
+        while time.time() - start_time < TIMEOUT:
+            try:
+                # MSG_PEEK is used to peek data (get a copy) still saving it in the buffer
+                peeked_data, addr = sock.recvfrom(1024, socket.MSG_PEEK)
+
+                # if the address belongs to the host, the packet should be finally accepted
+                if addr[0] == ip:
+                    # finally erasing data from the buffer
+                    response_data, addr = sock.recvfrom(1024)
+                    print(f"Получен ответ от {destination_addr} ({ip})")
+                    return
+
+            except socket.timeout:
+                pass
+
+        print(f"Таймаут для {destination_addr} ({ip})")
 
     except socket.error as e:
         print(f"Ошибка при отправке ping {destination_addr}: {e}")
     finally:
         sock.close()
+
 
 def ping_hosts(hosts):
     threads = []
@@ -85,6 +99,7 @@ def ping_hosts(hosts):
 
     for thread in threads:
         thread.join()
+
 
 hosts = [
     "localhost", "1.1.1.1", "8.8.8.8"
