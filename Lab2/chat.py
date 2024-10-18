@@ -6,11 +6,12 @@ import netifaces
 
 # Настройки
 BROADCAST_IP = '192.168.0.255'  # IP для широковещательной передачи
-MULTICAST_GROUP = '224.0.0.1'     # Многоадресный IP
-PORT = 12345
+MULTICAST_GROUP = '224.0.0.2'     # Многоадресный IP
+PORT_BROADCAST = 12345
+PORT_MULTICAST = 12346
 BUFFER_SIZE = 1024
 
-ignored_hosts = set()  # Список игнорируемых хостов
+ignored_hosts = set()
 running = True  # Флаг для управления потоками
 
 
@@ -37,10 +38,10 @@ def list_running_ips():
 def setup_broadcast_socket():
     """Настройка UDP-сокета для широковещательной передачи"""
     sock_broadcast = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock_broadcast.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # SO_REUSEADDR - для запуска на одной машине
-    # sock_broadcast.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    # sock_broadcast.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # SO_REUSEADDR - для запуска на одной машине
+    sock_broadcast.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
-    sock_broadcast.bind(('', PORT))  # привязка сокета к любому доступному адресу ('') и порту
+    sock_broadcast.bind(('', PORT_BROADCAST))  # привязка сокета к любому доступному адресу ('') и порту
 
     return sock_broadcast
 
@@ -48,12 +49,12 @@ def setup_broadcast_socket():
 def setup_multicast_socket():
     """Настройка UDP-сокета для многоадресной передачи"""
     sock_multicast = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock_multicast.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    # sock_multicast.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+    # sock_multicast.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock_multicast.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
     sock_multicast.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
                               struct.pack("4sl", socket.inet_aton(MULTICAST_GROUP), socket.INADDR_ANY))
 
-    sock_multicast.bind(('', PORT))
+    sock_multicast.bind(('', PORT_MULTICAST))
 
     return sock_multicast
 
@@ -89,11 +90,11 @@ def send_messages(sock_broadcast, sock_multicast):
 
         if choice == '1':
             message = input("Введите сообщение для Broadcast: ").strip()
-            sock_broadcast.sendto(message.encode('utf-8'), (BROADCAST_IP, PORT))
+            sock_broadcast.sendto(message.encode('utf-8'), (BROADCAST_IP, PORT_BROADCAST))
 
         elif choice == '2':
             message = input("Введите сообщение для Multicast: ").strip()
-            sock_multicast.sendto(message.encode('utf-8'), (MULTICAST_GROUP, PORT))
+            sock_multicast.sendto(message.encode('utf-8'), (MULTICAST_GROUP, PORT_MULTICAST))
 
         elif choice == '3':
             ignored_host = input("Введите IP-адрес для игнорирования: ").strip()
@@ -132,8 +133,6 @@ def main():
     receiving_broadcast_thread.start()
     receiving_multicast_thread.start()
     sending_thread.start()
-
-    # send_messages(sock_broadcast, sock_multicast)
 
     # Ожидание завершения потоков приема
     # receiving_broadcast_thread.join()
