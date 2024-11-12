@@ -5,7 +5,7 @@ import netifaces
 
 
 # Настройки
-BROADCAST_IP = '192.168.0.255'  # IP для широковещательной передачи
+BROADCAST_IP = '172.20.10.15'  # IP для широковещательной передачи
 MULTICAST_GROUP = '224.0.0.2'     # Многоадресный IP
 PORT_BROADCAST = 12345
 PORT_MULTICAST = 12346
@@ -66,7 +66,7 @@ def receive_messages(sock):
             data, address = sock.recvfrom(BUFFER_SIZE)
 
             if address[0] in ignored_hosts:
-                continue  # Игнорируем сообщения от игнорируемых адресов
+                continue
             print(f"\nПолучено сообщение от {address}: {data.decode('utf-8')}")
 
         except Exception as e:
@@ -78,15 +78,15 @@ def send_messages(sock_broadcast, sock_multicast):
     """Функция для отправки сообщений"""
     global running
 
-    while True:
-        print("\nМеню:")
-        print("1. Broadcast")
-        print("2. Multicast")
-        print("3. Игнорировать адрес")
-        print("4. Отменить игнорирование адреса")
-        print("5. Выйти из группы")
+    print("\nМеню:")
+    print("1. Broadcast")
+    print("2. Multicast")
+    print("3. Игнорировать адрес")
+    print("4. Отменить игнорирование адреса")
+    print("5. Выйти из группы")
 
-        choice = input("Выберите опцию: ").strip()
+    while True:
+        choice = input("\nВыберите опцию: ").strip()
 
         if choice == '1':
             message = input("Введите сообщение для Broadcast: ").strip()
@@ -135,9 +135,9 @@ def main():
     sending_thread.start()
 
     # Ожидание завершения потоков приема
-    # receiving_broadcast_thread.join()
-    # receiving_multicast_thread.join()
-    # sending_thread.join()
+    receiving_broadcast_thread.join()
+    receiving_multicast_thread.join()
+    sending_thread.join()
 
 
 if __name__ == '__main__':
