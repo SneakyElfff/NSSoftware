@@ -1,0 +1,37 @@
+services:
+  mpi-node1:
+    build:
+      context: .
+    container_name: mpi-node1
+    networks:
+      mpi-net:
+        ipv4_address: 192.168.1.101
+    ports:
+      - "2221:22"
+
+  mpi-node2:
+    build:
+      context: .
+    container_name: mpi-node2
+    networks:
+      mpi-net:
+        ipv4_address: 192.168.1.102
+    ports:
+      - "2222:22"
+
+  mpi-node3:
+    build:
+      context: .
+    container_name: mpi-node3
+    networks:
+      mpi-net:
+        ipv4_address: 192.168.1.103
+    ports:
+      - "2223:22"
+
+networks:
+  mpi-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24
