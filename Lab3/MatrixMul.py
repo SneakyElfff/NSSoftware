@@ -1,23 +1,10 @@
 from mpi4py import MPI
 import numpy as np
 
-def blockMode():
+def blockMode(A, B, M, N, K):
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
-
-    M = 1024
-    N = 256
-    K = 512
-
-    if rank == 0:
-        A = np.random.randint(100, size=(M, N))
-        B = np.random.randint(100, size=(N, K))
-    else:
-        A = None
-        B = np.empty((N, K), dtype=int)
-
-    comm.Bcast(B, root=0)
 
     rows_per_process = M // size
     extra_rows = M % size
@@ -34,6 +21,8 @@ def blockMode():
         block_A = None
 
     sub_A = comm.scatter(block_A, root=0)
+
+    comm.Bcast(B, root=0)
 
     comm.Barrier()
     start_time = MPI.Wtime()
@@ -57,23 +46,10 @@ def blockMode():
     return None, None
 
 
-def notBlockMode():
+def notBlockMode(A, B, M, N, K):
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
-
-    M = 1024
-    N = 256
-    K = 512
-
-    if rank == 0:
-        A = np.random.randint(100, size=(M, N))
-        B = np.random.randint(100, size=(N, K))
-    else:
-        A = None
-        B = np.empty((N, K), dtype=int)
-
-    request_b = comm.Ibcast(B, root=0)
 
     rows_per_process = M // size
     extra_rows = M % size
@@ -99,6 +75,7 @@ def notBlockMode():
     else:
         comm.Irecv(sub_A, source=0, tag=100 + rank).Wait()
 
+    request_b = comm.Ibcast(B, root=0)
     request_b.Wait()
 
     comm.Barrier()
@@ -128,15 +105,28 @@ def main():
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
+    # Матрицы генерируются один раз на процессе 0
+    M, N, K = 1024, 256, 512
+    if rank == 0:
+        A = np.random.randint(100, size=(M, N))
+        B = np.random.randint(100, size=(N, K))
+    else:
+        A = None
+        B = None
+
+    # Распространяем матрицы A и B на все процессы
+    A = comm.bcast(A, root=0)
+    B = comm.bcast(B, root=0)
+
     if rank == 0:
         print("Starting matrix multiplication in blocking mode...")
-    C_block, time_block = blockMode()
+    C_block, time_block = blockMode(A, B, M, N, K)
 
     comm.Barrier()
 
     if rank == 0:
         print("Switching to non-blocking mode...")
-    C_nonblock, time_nonblock = notBlockMode()
+    C_nonblock, time_nonblock = notBlockMode(A, B, M, N, K)
 
     if rank == 0:
         print("Comparing results...")
