@@ -57,27 +57,24 @@ def fileMode(group_comm, group, rank, group_ranks):
     B_file = "matrix_B.npy"
     C_file = f"matrix_C_file_{group}.npy"
 
-    A = np.load(A_file, mmap_mode='r')
+    A_shape = np.load(A_file, mmap_mode='r').shape
     B = np.load(B_file)
 
-    local_rows = A.shape[0] // len(group_ranks)
-    extra_rows = A.shape[0] % len(group_ranks)
+    num_processes = len(group_ranks)
 
-    if rank == group_ranks[0]:
-        chunk = []
-        start_row = 0
-        for i in range(len(group_ranks)):
-            end_row = start_row + local_rows + (1 if i < extra_rows else 0)
-            chunk.append((start_row, end_row))
-            start_row = end_row
-    else:
-        chunk = None
+    local_rows = A_shape[0] // len(group_ranks)
+    extra_rows = A_shape[0] % len(group_ranks)
 
-    chunk = group_comm.bcast(chunk, root=0)
+    chunk = []
+    start_row = 0
+    for i in range(num_processes):
+        end_row = start_row + local_rows + (1 if i < extra_rows else 0)
+        chunk.append((start_row, end_row))
+        start_row = end_row
+
     start_row, end_row = chunk[group_ranks.index(rank)]
 
-    A_local = A[start_row:end_row]
-    group_comm.bcast(B, root=0)
+    A_local = np.load(A_file, mmap_mode='r')[start_row:end_row, :]
 
     start_time = MPI.Wtime()
     C_local = np.dot(A_local, B)
