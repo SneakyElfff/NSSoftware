@@ -86,7 +86,7 @@ def fileMode(group_comm, group_id, rank, group_ranks):
         C = np.vstack(C_gathered)
         np.save(C_file, C)
         elapsed_time = end_time - start_time
-        print(f"Group {group_id}: Elapsed time for file mode: {elapsed_time:.3f} seconds\nGroup {group_id}: Result saved to {C_file}")
+        print(f"Group {group_id}: Elapsed time for file mode: {elapsed_time:.3f} seconds\nGroup {group_id}: Result saved to {C_file}\n")
         return C, elapsed_time
     return None, None
 
@@ -152,7 +152,7 @@ def main():
     size = comm.Get_size()
     rank = comm.Get_rank()
 
-    M, N, K = 512, 128, 256
+    M, N, K = 1024, 256, 512
 
     if len(sys.argv) < 2:
         if rank == 0:
@@ -174,7 +174,18 @@ def main():
     group_comm = comm.Create(group)
 
     if group_comm != MPI.COMM_NULL:
-        print(f"Process {rank} is in group {group_id} with ranks {group_ranks}")
+        group_info = comm.gather((group_id, rank), root=0)
+
+        if rank == 0:
+            groups = {}
+            for g_id, r in group_info:
+                if g_id not in groups:
+                    groups[g_id] = []
+                groups[g_id].append(r)
+
+            for g_id, ranks in groups.items():
+                print(f"Group {g_id}: processes {sorted(ranks)}")
+            print("\n")
 
         groupMode(group_comm, group_id, rank, group_ranks)
         fileMode(group_comm, group_id, rank, group_ranks)
@@ -196,13 +207,13 @@ def compare_results(file1, file2, rank):
         mat2 = np.load(file2)
         if np.array_equal(mat1, mat2):
             if rank == 0:
-                print(f"Comparison successful: files are identical.")
+                print(f"Comparison successful: files are identical.\n")
         else:
             if rank == 0:
-                print(f"Comparison failed: files are different.")
+                print(f"Comparison failed: files are different.\n")
     except Exception as e:
         if rank == 0:
-            print(f"Error comparing results: {e}")
+            print(f"Error comparing results: {e}\n")
 
 
 if __name__ == "__main__":
