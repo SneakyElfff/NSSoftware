@@ -2,6 +2,7 @@ from mpi4py import MPI
 import sys
 import numpy as np
 
+
 def groupMode(group_comm, group, rank, group_ranks):
     if group_comm == MPI.COMM_NULL:
         return
@@ -43,9 +44,53 @@ def groupMode(group_comm, group, rank, group_ranks):
         elapsed_group_time = end_group_time - start_group_time
         np.save(C_file, C)
         print(
-            f"Group {group}: Elapsed time for blocking matrix multiplication: {elapsed_group_time:.3f} seconds\nGroup {group}: Result saved to {C_file}")
+            f"Group {group}: Elapsed time for group mode: {elapsed_group_time:.3f} seconds\nGroup {group}: Result saved to {C_file}")
         return C, elapsed_group_time
     return None, None
+
+
+def fileMode(group_comm, group, rank, group_ranks):
+    if group_comm == MPI.COMM_NULL:
+        return
+
+    A_file = "matrix_A.npy"
+    B_file = "matrix_B.npy"
+    C_file = f"matrix_C_group_{group}.npy"
+
+    A_shape = np.load(A_file, mmap_mode='r').shape
+    B = np.load(B_file)
+
+    rows_per_process = A_shape[0] // len(group_ranks)
+    extra_rows = A_shape[0] % len(group_ranks)
+
+    start_row = rank * rows_per_process + min(rank, extra_rows)
+    end_row = start_row + rows_per_process + (1 if rank < extra_rows else 0)
+
+    sub_A = np.load(A_file, mmap_mode='r')[start_row:end_row, :]
+
+    group_comm.Bcast(B, root=0)
+
+    start_group_time = MPI.Wtime()
+
+    # Вычисление локальной части матрицы C
+    sub_C = np.zeros((sub_A.shape[0], B.shape[1]), dtype=int)
+    for i in range(sub_A.shape[0]):
+        for j in range(B.shape[1]):
+            for k in range(B.shape[0]):
+                sub_C[i, j] += sub_A[i, k] * B[k, j]
+
+    end_group_time = MPI.Wtime()
+
+    # Запись результатов в файл группы
+    with open(C_file, "ab") as f:
+        np.savetxt(f, sub_C, fmt='%d')
+
+    if rank == group_ranks[0]:
+        elapsed_group_time = end_group_time - start_group_time
+        print(
+            f"Group {group}: Elapsed time for file mode: {elapsed_group_time:.3f} seconds\n"
+            f"Group {group}: Results saved to {C_file}")
+
 
 def notBlockMode(comm, rank, size, M, N, K):
   rows_per_process = M // size
@@ -101,6 +146,7 @@ def notBlockMode(comm, rank, size, M, N, K):
     return C, elapsed_time
   return None, None
 
+
 def main():
   comm = MPI.COMM_WORLD
   size = comm.Get_size()
@@ -131,9 +177,10 @@ def main():
     print(f"Process {rank} is in group {group} with ranks {group_ranks}")
 
     groupMode(group_comm, group, rank, group_ranks)
+    fileMode(group_comm, group, rank, group_ranks)
     group_comm.Free()
   group.Free()
-  # A = np.load('matrixA.npy', mmap_mode='r')
+
   notBlockMode(comm, rank, size, M, N, K)
 
 if __name__ == "__main__":
