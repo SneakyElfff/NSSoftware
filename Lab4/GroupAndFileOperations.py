@@ -55,41 +55,43 @@ def fileMode(group_comm, group, rank, group_ranks):
 
     A_file = "matrix_A.npy"
     B_file = "matrix_B.npy"
-    C_file = f"matrix_C_group_{group}.npy"
+    C_file = f"matrix_C_file_{group}.npy"
 
-    A_shape = np.load(A_file, mmap_mode='r').shape
+    A = np.load(A_file, mmap_mode='r')
     B = np.load(B_file)
 
-    rows_per_process = A_shape[0] // len(group_ranks)
-    extra_rows = A_shape[0] % len(group_ranks)
-
-    start_row = rank * rows_per_process + min(rank, extra_rows)
-    end_row = start_row + rows_per_process + (1 if rank < extra_rows else 0)
-
-    sub_A = np.load(A_file, mmap_mode='r')[start_row:end_row, :]
-
-    group_comm.Bcast(B, root=0)
-
-    start_group_time = MPI.Wtime()
-
-    # Вычисление локальной части матрицы C
-    sub_C = np.zeros((sub_A.shape[0], B.shape[1]), dtype=int)
-    for i in range(sub_A.shape[0]):
-        for j in range(B.shape[1]):
-            for k in range(B.shape[0]):
-                sub_C[i, j] += sub_A[i, k] * B[k, j]
-
-    end_group_time = MPI.Wtime()
-
-    # Запись результатов в файл группы
-    with open(C_file, "ab") as f:
-        np.savetxt(f, sub_C, fmt='%d')
+    local_rows = A.shape[0] // len(group_ranks)
+    extra_rows = A.shape[0] % len(group_ranks)
 
     if rank == group_ranks[0]:
-        elapsed_group_time = end_group_time - start_group_time
-        print(
-            f"Group {group}: Elapsed time for file mode: {elapsed_group_time:.3f} seconds\n"
-            f"Group {group}: Results saved to {C_file}")
+        chunk = []
+        start_row = 0
+        for i in range(len(group_ranks)):
+            end_row = start_row + local_rows + (1 if i < extra_rows else 0)
+            chunk.append((start_row, end_row))
+            start_row = end_row
+    else:
+        chunk = None
+
+    chunk = group_comm.bcast(chunk, root=0)
+    start_row, end_row = chunk[group_ranks.index(rank)]
+
+    A_local = A[start_row:end_row]
+    group_comm.bcast(B, root=0)
+
+    start_time = MPI.Wtime()
+    C_local = np.dot(A_local, B)
+    end_time = MPI.Wtime()
+
+    C_gathered = group_comm.gather(C_local, root=0)
+
+    if rank == group_ranks[0]:
+        C = np.vstack(C_gathered)
+        np.save(C_file, C)
+        elapsed_time = end_time - start_time
+        print(f"Group {group}: Elapsed time for file mode: {elapsed_time:.3f} seconds\nGroup {group}: Result saved to {C_file}")
+        return C, elapsed_time
+    return None, None
 
 
 def notBlockMode(comm, rank, size, M, N, K):
@@ -152,7 +154,7 @@ def main():
   size = comm.Get_size()
   rank = comm.Get_rank()
 
-  M, N, K = 1024, 256, 512
+  M, N, K = 512, 128, 256
 
   if len(sys.argv) < 2:
     if rank == 0:
@@ -174,14 +176,34 @@ def main():
   group_comm = comm.Create(group)
 
   if group_comm != MPI.COMM_NULL:
-    print(f"Process {rank} is in group {group} with ranks {group_ranks}")
+      print(f"Process {rank} is in group {group} with ranks {group_ranks}")
 
-    groupMode(group_comm, group, rank, group_ranks)
-    fileMode(group_comm, group, rank, group_ranks)
-    group_comm.Free()
+      groupMode(group_comm, group, rank, group_ranks)
+      fileMode(group_comm, group, rank, group_ranks)
+
+      if rank == group_ranks[0]:
+          group_file = f"matrix_C_group_{group}.npy"
+          file_file = f"matrix_C_file_{group}.npy"
+          compare_results(group_file, file_file, rank)
+
+      group_comm.Free()
   group.Free()
 
   notBlockMode(comm, rank, size, M, N, K)
+
+def compare_results(file1, file2, rank):
+    try:
+        mat1 = np.load(file1)
+        mat2 = np.load(file2)
+        if np.array_equal(mat1, mat2):
+            if rank == 0:
+                print(f"Comparison successful: files are identical.")
+        else:
+            if rank == 0:
+                print(f"Comparison failed: files are different.")
+    except Exception as e:
+        if rank == 0:
+            print(f"Error comparing results: {e}")
 
 if __name__ == "__main__":
     main()
