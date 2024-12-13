@@ -1,3 +1,5 @@
+import os
+
 from mpi4py import MPI
 import sys
 import numpy as np
@@ -140,8 +142,8 @@ def notBlockMode(comm, rank, size, M, N, K):
         C = np.vstack(C_gathered)
 
         elapsed_time = end_time - start_time
-        print(f"Elapsed time for non-blocking matrix multiplication: {elapsed_time:.6f} seconds")
-        np.save('pairwise_output.npy', C)
+        print(f"Elapsed time for non-blocking matrix multiplication: {elapsed_time:.6f} seconds\n")
+        np.save('matrix_C_block.npy', C)
         return C, elapsed_time
 
     return None, None
@@ -190,30 +192,39 @@ def main():
         groupMode(group_comm, group_id, rank, group_ranks)
         fileMode(group_comm, group_id, rank, group_ranks)
 
-        if rank == group_ranks[0]:
-            group_file = f"matrix_C_group_{group_id}.npy"
-            file_file = f"matrix_C_file_{group_id}.npy"
-            compare_results(group_file, file_file, rank)
-
         group_comm.Free()
     group.Free()
 
     notBlockMode(comm, rank, size, M, N, K)
 
+    compare_matrices(rank)
 
-def compare_results(file1, file2, rank):
-    try:
-        mat1 = np.load(file1)
-        mat2 = np.load(file2)
-        if np.array_equal(mat1, mat2):
-            if rank == 0:
-                print(f"Comparison successful: files are identical.\n")
+
+def compare_matrices(rank):
+    if rank == 0:
+        files = [f for f in os.listdir('.') if f.startswith('matrix_C')]
+
+        if not files:
+            print("No files starting with 'matrix_C'.")
+            return
+
+        matrices = {}
+
+        for file in files:
+            try:
+                data = np.load(file)
+                matrices[file] = data
+            except Exception as e:
+                print(f"Failed to read {file}: {e}")
+                return
+
+        first_matrix = list(matrices.values())[0]
+        all_match = all(np.array_equal(first_matrix, matrix) for matrix in matrices.values())
+
+        if all_match:
+            print("All results match")
         else:
-            if rank == 0:
-                print(f"Comparison failed: files are different.\n")
-    except Exception as e:
-        if rank == 0:
-            print(f"Error comparing results: {e}\n")
+            print("Results do NOT match")
 
 
 if __name__ == "__main__":
